@@ -1,0 +1,189 @@
+{
+    "hotkey": "ctrl+shift+win",
+    "magic_hotkey": "alt+win",
+    "smart_left": true,
+    "smart_right": true,
+    "smart_hold_duration": 0.3,
+    "use_punc": true,
+    "recording_mode": 0,
+    "recording_style": 2,
+    "sound_style_idx": 6,
+    "opt_profiles": [
+        {
+            "name": "\u65e5\u5e38\u6587\u5b57\u6f64\u98fe\u8207\u932f\u5b57\u4fee\u6b63",
+            "prompt": "\u4f60\u662f\u4e00\u500b\u5c08\u696d\u7684\u6587\u5b57\u7de8\u8f2f\u3002\u8acb\u4fee\u6b63\u4ee5\u4e0b\u6587\u5b57\u4e2d\u7684\u932f\u5225\u5b57\u8207\u6a19\u9ede\u7b26\u865f\uff0c\u4f7f\u8a9e\u53e5\u901a\u9806\u3002\u4e0d\u8981\u6539\u8b8a\u539f\u672c\u7684\u8a9e\u6c23\u8207\u610f\u601d\uff0c\u4e0d\u8981\u52a0\u4efb\u4f55\u958b\u5834\u767d\u6216\u89e3\u91cb\uff0c\u76f4\u63a5\u8f38\u51fa\u4fee\u6539\u5f8c\u7684\u6587\u5b57\u3002"
+        },
+        {
+            "name": "\u6307\u6d3e\u4efb\u52d9\u578b (\u7522\u751f\u7d50\u69cb\u5316\u6307\u4ee4)",
+            "prompt": "\u4f60\u662f\u4e00\u500b\u5c08\u696d\u7684\u63d0\u793a\u8a5e\u5de5\u7a0b\u5e2b\u3002\u8acb\u52d9\u5fc5\u4f7f\u7528 Markdown \u683c\u5f0f\uff0c\u5c07\u4f7f\u7528\u8005\u7684\u6a21\u7cca\u60f3\u6cd5\u7d50\u69cb\u5316\u70ba\u5177\u5099\u57f7\u884c\u529b\u7684 AI \u6307\u4ee4\u3002\u8acb\u660e\u78ba\u5283\u5206\u4ee5\u4e0b\u6a21\u584a\uff1a\n## 1. \u4efb\u52d9\u89d2\u8272 (Role)\n## 2. \u80cc\u666f\u8207\u4e0a\u4e0b\u6587 (Context)\n## 3. \u5177\u9ad4\u8981\u6c42\u8207\u9650\u5236 (Constraints)\n## 4. \u9810\u671f\u8f38\u51fa\u683c\u5f0f (Output Format)\n\u8acb\u76f4\u63a5\u8f38\u51fa\u7d50\u69cb\u5316\u5f8c\u7684\u7d50\u679c\uff0c\u4e0d\u8981\u4efb\u4f55\u958b\u5834\u767d\u8207\u5ee2\u8a71\u3002"
+        },
+        {
+            "name": "\u901a\u7528",
+            "prompt": "\u8acb\u512a\u5316:"
+        }
+    ],
+    "show_console": false,
+    "audio_cue": true,
+    "vad_sensitivity": 74,
+    "silence_timeout": 5.0,
+    "auto_fix": false,
+    "engine_version": "v2_stable",
+    "magic_items": [
+        {
+            "id": "LEARN",
+            "name": "\ud83d\udcd3 \u52a0\u5165\u500b\u4eba\u8a5e\u5eab",
+            "visible": true,
+            "type": "internal",
+            "val": ""
+        },
+        {
+            "id": "FIX",
+            "name": "\ud83e\ude84 AI \u500b\u4eba\u5316\u63d0\u793a\u8a5e\u6700\u4f73\u5316",
+            "visible": true,
+            "type": "internal",
+            "val": ""
+        },
+        {
+            "id": "VISION",
+            "name": "\ud83d\udcf8 \u64f7\u53d6\u756b\u9762\u4e26\u7ffb\u8b6f\u5c0d\u7167",
+            "visible": true,
+            "type": "internal",
+            "val": ""
+        },
+        {
+            "id": "SETTINGS",
+            "name": "\u2699\ufe0f \u52a9\u624b\u8a2d\u5b9a",
+            "visible": true,
+            "type": "internal"
+        },
+        {
+            "id": "macro_1780208440",
+            "name": "\u5168\u9078\u8907\u88fd",
+            "visible": true,
+            "type": "combo",
+            "val": "a+ctrl, c+ctrl"
+        },
+        {
+            "id": "macro_1780233400",
+            "name": "\u5168\u9078\u8cbc\u4e0a",
+            "visible": true,
+            "type": "combo",
+            "val": "a+ctrl, ctrl+v, "
+        },
+        {
+            "id": "macro_1780537796",
+            "name": "\u5c0f\u7b97\u76e4",
+            "visible": true,
+            "type": "app",
+            "val": "calc.exe"
+        }
+    ],
+    "gemini_api_key": "AIzaSyCLPPo7i-2LeZstyBjDc1h9E86lYdaSgbM",
+    "opt_model": "gemini-3.1-flash-lite-preview",
+    "vision_model": "gemini-3.1-flash-lite-preview",
+    "fix_model": "gemma-4-31b-it",
+    "vad_buffer": 5.0,
+    "active_profile_idx": 0,
+    "auto_start": true,
+    "model_cache": [
+        {
+            "can_vision": true,
+            "display": "gemini-2.5-flash",
+            "id": "models/gemini-2.5-flash"
+        },
+        {
+            "can_vision": true,
+            "display": "gemini-2.5-flash-lite",
+            "id": "models/gemini-2.5-flash-lite"
+        },
+        {
+            "can_vision": true,
+            "display": "gemini-3-flash-preview",
+            "id": "models/gemini-3-flash-preview"
+        },
+        {
+            "can_vision": true,
+            "display": "gemini-3.1-flash-lite",
+            "id": "models/gemini-3.1-flash-lite"
+        },
+        {
+            "can_vision": true,
+            "display": "gemini-3.1-flash-lite-preview",
+            "id": "models/gemini-3.1-flash-lite-preview"
+        },
+        {
+            "can_vision": true,
+            "display": "gemini-3.5-flash",
+            "id": "models/gemini-3.5-flash"
+        },
+        {
+            "can_vision": true,
+            "display": "gemini-flash-lite-latest",
+            "id": "models/gemini-flash-lite-latest"
+        },
+        {
+            "can_vision": false,
+            "display": "gemini-robotics-er-1.6-preview",
+            "id": "models/gemini-robotics-er-1.6-preview"
+        },
+        {
+            "can_vision": false,
+            "display": "gemma-4-26b-a4b-it",
+            "id": "models/gemma-4-26b-a4b-it"
+        },
+        {
+            "can_vision": false,
+            "display": "gemma-4-31b-it",
+            "id": "models/gemma-4-31b-it"
+        }
+    ],
+    "output_mode": 0,
+    "ui_x": 856,
+    "ui_y": 863,
+    "dictionary_data": [
+        [
+            "\u8996\u7621",
+            "\u8996\u7a97"
+        ],
+        [
+            "\u56db\u5ddd",
+            "\u8996\u7a97"
+        ],
+        [
+            "\u56db\u7a97",
+            "\u8996\u7a97"
+        ],
+        [
+            "\u63d0\u793a\u6b64",
+            "\u63d0\u793a\u8a5e"
+        ],
+        [
+            "\u76e3\u63a7\u81fa",
+            "\u76e3\u63a7\u53f0"
+        ],
+        [
+            "\u63d0\u793a\u5c3a",
+            "\u63d0\u793a\u8a5e"
+        ],
+        [
+            "\u63d0\u793a\u7d19",
+            "\u63d0\u793a\u8a5e"
+        ],
+        [
+            "\u8aee\u884c",
+            "\u57f7\u884c"
+        ],
+        [
+            "\u7e6a\u51fa",
+            "\u532f\u51fa"
+        ],
+        [
+            "\u6703\u51fa",
+            "\u532f\u51fa"
+        ],
+        [
+            "\u5f0f\u7a97",
+            "\u8996\u7a97"
+        ]
+    ]
+}

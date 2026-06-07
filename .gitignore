@@ -1,0 +1,42 @@
+# .gitignore for AI Voice Assistant
+
+# Python cache & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# PyInstaller / Build outputs
+build/
+dist/
+*.spec
+
+# Huge model files (2.33 GB)
+models/
+bin/
+*.bin
+
+# Backups & Logs
+backups/
+*.log
+*.zip
+*.log.*
+app_runtime.*.log
+debug_report.log
+error.log
+log.log
+*.png
+
+# User temporary data
+user_data/collected_feedback.csv
+user_data/temp_snip.png
+user_data/user_learning.db
+user_data/user_learning.db.migrated
+user_settings_backup/
+ai_assistant_settings.json
+ai_settings_backup.json
+
+# Keep only the global dictionary file in user_data
+!user_data/global_learning.csv
