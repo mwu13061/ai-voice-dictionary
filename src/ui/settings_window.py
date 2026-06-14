@@ -118,7 +118,7 @@ class QuickAddDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("📔 快速加入")
         self.setFixedSize(220, 100)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Dialog)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._drag_pos = None
         self.setup_ui(initial_text)
