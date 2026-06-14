@@ -60,22 +60,24 @@ class DictionaryHandler:
         self.quick_dlg.activateWindow()
 
     def add_item(self, orig, corr):
-        auto_gen = self.controller.settings.raw_config.get("auto_generate_variants", False)
-        if self.controller.learning_engine.add_habit_manual(orig, corr, auto_gen):
-            self.controller.settings.update_dict_list(self.controller.learning_engine.list_all())
-            self.controller.ready_signal.emit(f"✅ 已加入詞庫: {orig} ➔ {corr}")
-        else:
-            # [A65] Audit fix: show error when add fails (was silent)
-            self.controller.ready_signal.emit(f"❌ 加入詞庫失敗，請確認詞條格式是否正確")
+        try:
+            if self.controller.learning_engine.add_habit_manual(orig, corr):
+                self.controller.settings.update_dict_list(self.controller.learning_engine.list_all())
+                self.controller.ready_signal.emit(f"✅ 已加入詞庫: {orig} ➔ {corr}")
+            else:
+                self.controller.ready_signal.emit(f"❌ 加入詞庫失敗，請確認詞條格式是否正確")
+        except Exception as e:
+            logger.error(f"❌ [DICT_HANDLER] add_item error: {e}")
+            self.controller.ready_signal.emit(f"❌ 加入詞庫時發生錯誤: {e}")
 
     def import_items(self, items_json):
         try:
             import json
             items = json.loads(items_json)
-            auto_gen = self.controller.settings.raw_config.get("auto_generate_variants", False)
             count = 0
             for orig, corr in items:
-                if self.controller.learning_engine.add_habit_manual(orig, corr, auto_gen): count += 1
+                if self.controller.learning_engine.add_habit_manual(orig, corr):
+                    count += 1
             self.controller.settings.update_dict_list(self.controller.learning_engine.list_all())
             logger.success(f"📔 [DICT_HANDLER] Merged {count} items.")
         except Exception as e:
