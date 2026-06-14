@@ -181,11 +181,11 @@ class LearningEngine:
                 except Exception as ge:
                     logger.warning(f"Failed to read global dictionary for auto-collect check: {ge}")
 
-            # [A36] Only collect phonetic typos (homophones), ignoring custom shortcuts/abbreviations
+            # [A36] Collect potential dict corrections, filtering out custom shortcuts, long macros, or sensitive strings
             db_dict = {}
             for orig, corr in db_items:
-                if self.is_phonetic_typo(orig, corr):
-                    if (orig, corr) not in existing_global:
+                if (orig, corr) not in existing_global:
+                    if self.is_legitimate_dict_correction(orig, corr):
                         db_dict[orig] = corr
                     
             if not db_dict:
@@ -277,6 +277,29 @@ class LearningEngine:
                     break
                     
         return list(variants)[:5]
+
+    def is_legitimate_dict_correction(self, orig: str, corr: str) -> bool:
+        """ [A36] Checks if it looks like a legitimate vocabulary correction (rather than a macro/private shortcut) """
+        if not orig or not corr:
+            return False
+        # 1. Length constraint: normal phonetic typos are within 2 to 15 chars
+        if len(orig) < 2 or len(orig) > 15:
+            return False
+        if len(corr) < 2 or len(corr) > 15:
+            return False
+        # 2. Length difference constraint: homophone typos usually have similar lengths
+        if abs(len(orig) - len(corr)) > 3:
+            return False
+        # 3. Filter out digits/emails/URLs/macros
+        if orig.isdigit() or corr.isdigit():
+            return False
+        if "@" in orig or "@" in corr:
+            return False
+        if "http" in orig or "http" in corr:
+            return False
+        if "\n" in orig or "\n" in corr or "\r" in orig or "\r" in corr:
+            return False
+        return True
 
     def is_phonetic_typo(self, orig: str, corr: str) -> bool:
         """ [A36] Checks if orig and corr represent a phonetic typo (homophones) """
