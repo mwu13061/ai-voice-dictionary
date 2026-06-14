@@ -38,8 +38,8 @@ class DictionaryHandler:
             cursor_screen = QGuiApplication.primaryScreen()
         screen = cursor_screen.availableGeometry()
         
-        dlg_w = 250
-        dlg_h = 170
+        dlg_w = 260
+        dlg_h = 185
         
         # Place above the cursor
         x = pos.x() - dlg_w // 2
