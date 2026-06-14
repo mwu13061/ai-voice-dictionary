@@ -422,7 +422,7 @@ class GlobalDictionaryViewer(QDialog):
             item.setFlags(item.flags() & ~Qt.ItemIsEnabled) # Make it unselectable
             self.lw.addItem(item)
         else:
-            for orig, corr in sorted(self.items_list, key=lambda x: x[0]):
+            for orig, corr in sorted(self.items_list, key=lambda x: (x[1], x[0])):
                 item = QListWidgetItem(f"✅ {orig} ➔ {corr}")
                 item.setData(Qt.UserRole, (orig, corr))
                 self.lw.addItem(item)
@@ -772,6 +772,9 @@ class GlobalDictModeratorDialog(QDialog):
             # Classify
             self.lw_low.clear()
             self.lw_high.clear()
+            
+            # Sort items by Corrected (index 1) first, then Original (index 0)
+            items.sort(key=lambda x: (x[1], x[0]))
             
             skipped_count = 0
             for orig, corr in items:
