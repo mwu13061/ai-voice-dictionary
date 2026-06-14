@@ -73,6 +73,8 @@ class AppController(QObject):
     
     def __init__(self):
         super().__init__()
+        self._target_hwnd = None
+        self._last_valid_target_hwnd = None
         self.is_recording = False
         self.is_engine_ready = False
         self._first_load_done = False
@@ -201,6 +203,27 @@ class AppController(QObject):
             if self.is_recording: return
             self.is_recording = True
             
+            # Capture target window HWND when recording starts (excluding self process)
+            try:
+                import ctypes
+                import os
+                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                if hwnd:
+                    pid = ctypes.c_ulong()
+                    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if pid.value != os.getpid():
+                        self._target_hwnd = hwnd
+                        self._last_valid_target_hwnd = hwnd
+                        logger.debug(f"🎯 [OUTPUT] Target HWND captured: {self._target_hwnd} (PID {pid.value})")
+                    else:
+                        self._target_hwnd = self._last_valid_target_hwnd
+                        logger.debug(f"🎯 [OUTPUT] Current foreground belongs to self. Fallback to last valid HWND: {self._target_hwnd}")
+                else:
+                    self._target_hwnd = self._last_valid_target_hwnd
+            except Exception as e:
+                logger.warning(f"Failed to capture target HWND: {e}")
+                self._target_hwnd = self._last_valid_target_hwnd
+            
             ui_idx = self.settings.raw_config.get("recording_style", 1)
             m = {0: 2, 1: 0, 2: 1}
             self.ui.set_style(m.get(ui_idx, 0))
@@ -265,8 +288,59 @@ class AppController(QObject):
             return
         self._asr_queue.put((audio_data, is_restart))
  
+    def _force_foreground_window(self, hwnd):
+        try:
+            import ctypes
+            from ctypes import wintypes
+            import time
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            
+            if user32.GetForegroundWindow() == hwnd:
+                return True
+                
+            user32.BringWindowToTop(hwnd)
+            if user32.SetForegroundWindow(hwnd):
+                return True
+                
+            current_tid = kernel32.GetCurrentThreadId()
+            foreground_tid = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+            
+            attached = False
+            if current_tid != foreground_tid and foreground_tid != 0:
+                attached = user32.AttachThreadInput(current_tid, foreground_tid, True)
+                
+            try:
+                user32.BringWindowToTop(hwnd)
+                user32.ShowWindow(hwnd, 5) # SW_SHOW
+                for _ in range(3):
+                    if user32.SetForegroundWindow(hwnd):
+                        return True
+                    time.sleep(0.01)
+                return False
+            finally:
+                if attached:
+                    user32.AttachThreadInput(current_tid, foreground_tid, False)
+        except Exception as e:
+            logger.error(f"❌ [OUTPUT] _force_foreground_window error: {e}")
+            return False
+
     def _handle_asr_output_background(self, text):
         if self.output_plugin:
+            target = self._target_hwnd
+            focus_ok = False
+            if target:
+                focus_ok = self._force_foreground_window(target)
+                if not focus_ok:
+                    try:
+                        import ctypes
+                        curr = ctypes.windll.user32.GetForegroundWindow()
+                        buf = ctypes.create_unicode_buffer(256)
+                        ctypes.windll.user32.GetWindowTextW(curr, buf, 256)
+                        logger.warning(f"⚠️ [OUTPUT] Cannot restore focus. Current window: '{buf.value}'. Output may land in wrong app!")
+                    except:
+                        pass
+            logger.info(f"📤 [OUTPUT] Sending to plugin: '{text}' (focus_restored={focus_ok})")
             self.output_plugin.output(text, mode=self.settings.raw_config.get("output_mode", 0))
  
     def _handle_asr_output(self, text):

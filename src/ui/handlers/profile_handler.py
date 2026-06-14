@@ -23,7 +23,7 @@ class ProfileHandler:
         if not text or not text.strip():
             logger.warning("⚠️ [FIX] No text captured. Aborting.")
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.information(None, "提示", "未偵測到選取文字。\\n請先用滑鼠選取一段文字後再執行此功能。")
+            QMessageBox.information(None, "提示", "未偵測到選取文字。\n請先用滑鼠選取一段文字後再執行此功能。")
             return
 
         ready, err = self.controller.cloud_engine.is_ready()

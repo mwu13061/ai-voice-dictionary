@@ -42,9 +42,12 @@ class EngineV1Legacy:
             logger.error(f"EngineV1 Load Error: {e}")
             return False
 
+    def update_config(self, config: dict):
+        self.language = config.get("asr_language", "zh")
+
     def process(self, audio_data: np.ndarray) -> str:
         try:
-            res = self.asr_model.generate(input=audio_data, cache={}, language="zh", use_itn=True)
+            res = self.asr_model.generate(input=audio_data, cache={}, language=getattr(self, "language", "zh"), use_itn=True)
             raw_asr = re.sub(r'<\|.*?\|>', '', res[0].get('text', '')).strip()
             if not raw_asr: return ""
             

@@ -61,7 +61,9 @@ class SmartTrigger(QObject):
             if pressed:
                 if self._button_held: return 
                 if (button == mouse.Button.left and self._left_enabled) or (button == mouse.Button.right and self._right_enabled):
-                    self._button_held = button; self._start_pos = (x, y); self._is_moving = False; self._start_timer()
+                    self._button_held = button; self._start_pos = (x, y); self._is_moving = False
+                    self._start_timer()
+
             else:
                 if self._button_held == button:
                     self._cancel_timer(); self._button_held = None

@@ -352,36 +352,148 @@ class AppPickerDialog(QDialog):
             QMessageBox.warning(self, "提示", "請先選擇一個應用程式。")
 
 class GlobalDictionaryViewer(QDialog):
-    """ [A43] Read-only viewer for the synchronized global dictionary """
+    """ [A43] Viewer and manager for the synchronized global dictionary """
     def __init__(self, items, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("📖 全球詞庫內容 (唯讀)")
-        self.setFixedSize(500, 550)
+        self.setWindowTitle("📖 全球共享詞庫管理與編輯")
+        self.setFixedSize(550, 600)
         self.setStyleSheet("""
             QDialog { background: #1a252f; color: #ecf0f1; }
             QLabel { color: #f1c40f; font-weight: bold; font-size: 10pt; }
             QListWidget { background: #0d1117; color: #3498db; border: 1px solid #3498db; font-size: 10pt; padding: 5px; }
-            QPushButton { background: #2c3e50; border: 1px solid #3498db; color: white; padding: 8px; font-weight: bold; min-height: 30px; }
+            QPushButton { background: #2c3e50; border: 1px solid #3498db; color: white; padding: 8px; font-weight: bold; min-height: 30px; border-radius: 4px; }
+            QPushButton:hover { background: #34495e; border-color: #2980b9; }
         """)
+        
+        from src.utils.learning_engine import LearningEngine
+        self.engine = LearningEngine()
+        
         l = QVBoxLayout(self)
-        l.addWidget(QLabel("🌐 全球共享詞庫對照表 (下載自雲端 / 唯讀):"))
+        l.addWidget(QLabel("🌐 全球共享詞庫對照表 (下載自雲端 / 本地暫存)："))
         
         self.lw = QListWidget()
-        if not items:
-            self.lw.addItem("⚠️ 目前全球共享詞庫為空，或尚未成功從雲端同步。")
-        else:
-            groups = {}
-            for o, c in items:
-                groups.setdefault(c, []).append(o)
-            for k in sorted(groups.keys()):
-                vars_str = ", ".join(groups[k])
-                self.lw.addItem(f"✅ {k} ➔ 錯誤音候補: [{vars_str}]")
-                
         l.addWidget(self.lw)
+        
+        # Populate list widget
+        self.items_list = list(items)  # list of (orig, corr)
+        self.populate_list()
+        
+        # Buttons layout
+        h_ops = QHBoxLayout()
+        self.btn_add = QPushButton("➕ 新增詞條")
+        self.btn_add.clicked.connect(self.add_new_item)
+        h_ops.addWidget(self.btn_add)
+        
+        self.btn_edit = QPushButton("✏️ 編輯選取")
+        self.btn_edit.clicked.connect(self.edit_selected)
+        h_ops.addWidget(self.btn_edit)
+        
+        self.btn_delete = QPushButton("❌ 刪除選取")
+        self.btn_delete.clicked.connect(self.delete_selected)
+        h_ops.addWidget(self.btn_delete)
+        
+        l.addLayout(h_ops)
         
         b_close = QPushButton("關閉")
         b_close.clicked.connect(self.accept)
         l.addWidget(b_close)
+
+    def populate_list(self):
+        self.lw.clear()
+        if not self.items_list:
+            item = QListWidgetItem("⚠️ 目前全球共享詞庫為空，或尚未成功從雲端同步。")
+            item.setFlags(item.flags() & ~Qt.ItemIsEnabled) # Make it unselectable
+            self.lw.addItem(item)
+        else:
+            for orig, corr in sorted(self.items_list, key=lambda x: x[0]):
+                item = QListWidgetItem(f"✅ {orig} ➔ {corr}")
+                item.setData(Qt.UserRole, (orig, corr))
+                self.lw.addItem(item)
+
+    def add_new_item(self):
+        dlg = EditPairDialog("", "", self)
+        if dlg.exec() == QDialog.Accepted:
+            orig = dlg.orig_in.text().strip()
+            corr = dlg.corr_in.text().strip()
+            if not orig or not corr:
+                return
+            
+            # Check if orig already exists
+            for i, (o, c) in enumerate(self.items_list):
+                if o == orig:
+                    reply = QMessageBox.question(
+                        self, "詞條已存在", f"「{orig}」已存在於詞庫中（對應到「{c}」）。是否要將其覆蓋？",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if reply == QMessageBox.Yes:
+                        self.items_list[i] = (orig, corr)
+                        self.save_and_refresh()
+                    return
+            
+            self.items_list.append((orig, corr))
+            self.save_and_refresh()
+
+    def edit_selected(self):
+        selected = self.lw.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "提示", "請先選擇要編輯的項目。")
+            return
+        item = selected[0]
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        orig, corr = data
+        dlg = EditPairDialog(orig, corr, self)
+        if dlg.exec() == QDialog.Accepted:
+            new_orig = dlg.orig_in.text().strip()
+            new_corr = dlg.corr_in.text().strip()
+            if not new_orig or not new_corr:
+                return
+            
+            # Remove old one
+            self.items_list = [x for x in self.items_list if x[0] != orig]
+            
+            # Add new one
+            self.items_list.append((new_orig, new_corr))
+            self.save_and_refresh()
+
+    def delete_selected(self):
+        selected = self.lw.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "提示", "請先選擇要刪除的項目。")
+            return
+        
+        reply = QMessageBox.question(
+            self, "確認刪除", "確定要刪除選取的詞條嗎？這將會立即儲存到本地全球詞庫檔案中。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.No:
+            return
+
+        for item in selected:
+            data = item.data(Qt.UserRole)
+            if data:
+                orig, corr = data
+                self.items_list = [x for x in self.items_list if x[0] != orig]
+                
+        self.save_and_refresh()
+
+    def save_and_refresh(self):
+        from src.utils.learning_engine import get_locked_db_path
+        import csv
+        db_dir = os.path.dirname(get_locked_db_path())
+        global_csv_path = os.path.join(db_dir, "global_learning.csv")
+        try:
+            os.makedirs(os.path.dirname(global_csv_path), exist_ok=True)
+            with open(global_csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Original', 'Correction'])
+                for orig, corr in sorted(self.items_list):
+                    writer.writerow([orig, corr])
+            self.engine.refresh_cache()
+            self.populate_list()
+        except Exception as ex:
+            QMessageBox.critical(self, "儲存失敗", f"無法儲存至本地 global_learning.csv: {ex}")
 
 class EditPairDialog(QDialog):
     def __init__(self, orig="", corr="", parent=None):
@@ -1799,7 +1911,16 @@ class SettingsWindow(QWidget):
             "hotkey": "ctrl+shift+win", "magic_hotkey": "alt+win", 
             "smart_left": True, "smart_right": True, "smart_hold_duration": 0.5, 
             "use_punc": True, "recording_mode": 0, "recording_style": 1, "sound_style_idx": 9,
-            "opt_profiles": [{"name": "通用", "prompt": "請優化:"}], "show_console": True,
+            "opt_profiles": [
+                {
+                    "name": "日常文字潤飾與錯字修正",
+                    "prompt": "你是一個專業的文字編輯。請修正以下文字中的錯別字與標點符號，使語句通順。不要改變原本的語氣與意思，不要加任何開場白或解釋，直接輸出修改後的文字。"
+                },
+                {
+                    "name": "指派任務型 (產生結構化指令)",
+                    "prompt": "你是一個專業的提示詞工程師。請務必使用 Markdown 格式，將使用者的模糊想法結構化為具備執行力的 AI 指令。請明確劃分以下模塊：\n## 1. 任務角色 (Role)\n## 2. 背景與上下文 (Context)\n## 3. 具體要求與限制 (Constraints)\n## 4. 預期輸出格式 (Output Format)\n請直接輸出結構化後的結果，不要任何開場白與廢話。"
+                }
+            ], "show_console": True,
             "audio_cue": True, "vad_sensitivity": 50, "silence_timeout": 5.0, "auto_fix": False,
             "engine_version": "v2_stable",
             "magic_items": [
@@ -1822,6 +1943,22 @@ class SettingsWindow(QWidget):
             if not any(x["id"] == k for x in its):
                 its.insert(0, {"id": k, "name": v, "visible": True, "type": "internal", "val": ""})
         self.raw_config["magic_items"] = its
+        
+        # 載入後，如果發現 opt_profiles 是空的，或是只有預設的舊 "通用" 方案，則強制使用預設的這兩個方案
+        profiles = self.raw_config.get("opt_profiles", [])
+        if not profiles or (len(profiles) == 1 and profiles[0].get("name") in ["通用", ""]):
+            self.raw_config["opt_profiles"] = [
+                {
+                    "name": "日常文字潤飾與錯字修正",
+                    "prompt": "你是一個專業的文字編輯。請修正以下文字中的錯別字與標點符號，使語句通順。不要改變原本的語氣與意思，不要加任何開場白或解釋，直接輸出修改後的文字。"
+                },
+                {
+                    "name": "指派任務型 (產生結構化指令)",
+                    "prompt": "力量與方向。請務必使用 Markdown 格式，將使用者的模糊想法結構化為具備執行力的 AI 指令。請明確劃分以下模塊：\n## 1. 任務角色 (Role)\n## 2. 背景與上下文 (Context)\n## 3. 具體要求與限制 (Constraints)\n## 4. 預期輸出格式 (Output Format)\n請直接輸出結構化後的結果，不要任何開場白與廢話。"
+                }
+            ]
+            # Replace placeholder text with the actual user prompt (fix '力量與方向')
+            self.raw_config["opt_profiles"][1]["prompt"] = "你是一個專業的提示詞工程師。請務必使用 Markdown 格式，將使用者的模糊想法結構化為具備執行力的 AI 指令。請明確劃分以下模塊：\n## 1. 任務角色 (Role)\n## 2. 背景與上下文 (Context)\n## 3. 具體要求與限制 (Constraints)\n## 4. 預期輸出格式 (Output Format)\n請直接輸出結構化後的結果，不要任何開場白與廢話。"
         
         self._apply_ui()
 

@@ -12,14 +12,14 @@ class SnipOverlay(QWidget):
     - Emits the selected geometry.
     """
     snip_captured = Signal(QRect)
+    closed = Signal()
 
     def __init__(self):
         super().__init__()
         self.setWindowFlags(
             Qt.FramelessWindowHint | 
             Qt.WindowStaysOnTopHint | 
-            Qt.Tool |
-            Qt.WindowDoesNotAcceptFocus # [A600] Do not steal focus to prevent OS "beep" sounds
+            Qt.Tool
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setCursor(Qt.CrossCursor)
@@ -63,6 +63,8 @@ class SnipOverlay(QWidget):
             self.end = self.begin
             self.is_selecting = True
             self.update()
+        elif event.button() == Qt.RightButton:
+            self.close()
 
     def mouseMoveEvent(self, event):
         if self.is_selecting:
@@ -76,12 +78,15 @@ class SnipOverlay(QWidget):
             if rect.width() > 10 and rect.height() > 10:
                 self.snip_captured.emit(rect)
             self.close()
-            self.deleteLater()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             self.close()
-            self.deleteLater()
+
+    def closeEvent(self, event):
+        self.closed.emit()
+        self.deleteLater()
+        super().closeEvent(event)
 
 def start_snipping():
     """ Helper to start the snipping process """

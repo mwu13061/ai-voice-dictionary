@@ -30,29 +30,52 @@ class DictionaryHandler:
         self.quick_dlg = QuickAddDialog(text)
         self.quick_dlg.add_req.connect(self.add_item)
         
-        # 3. Position near cursor
+        # 3. Position above cursor, centered horizontally, with flip and screen clamping
         pos = QCursor.pos()
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        x = max(screen.left(), min(pos.x() + 10, screen.right() - 250))
-        y = max(screen.top(), min(pos.y() + 10, screen.bottom() - 150))
-        self.quick_dlg.move(x, y)
+        # [A60] Use the screen that CONTAINS the cursor (multi-monitor fix)
+        cursor_screen = QGuiApplication.screenAt(pos)
+        if cursor_screen is None:
+            cursor_screen = QGuiApplication.primaryScreen()
+        screen = cursor_screen.availableGeometry()
+        
+        dlg_w = 250
+        dlg_h = 170
+        
+        # Place above the cursor
+        x = pos.x() - dlg_w // 2
+        y = pos.y() - dlg_h - 20
+        
+        # If it would go above the screen top, place it below the cursor instead
+        if y < screen.top():
+            y = pos.y() + 20
+            
+        # Clamp to screen boundaries
+        x = max(screen.left(), min(x, screen.right() - dlg_w))
+        y = max(screen.top(), min(y, screen.bottom() - dlg_h))
+        
+        self.quick_dlg.setGeometry(x, y, dlg_w, dlg_h)
         
         self.quick_dlg.show()
         self.quick_dlg.raise_()
         self.quick_dlg.activateWindow()
 
     def add_item(self, orig, corr):
-        if self.controller.learning_engine.add_habit_manual(orig, corr):
+        auto_gen = self.controller.settings.raw_config.get("auto_generate_variants", False)
+        if self.controller.learning_engine.add_habit_manual(orig, corr, auto_gen):
             self.controller.settings.update_dict_list(self.controller.learning_engine.list_all())
             self.controller.ready_signal.emit(f"✅ 已加入詞庫: {orig} ➔ {corr}")
+        else:
+            # [A65] Audit fix: show error when add fails (was silent)
+            self.controller.ready_signal.emit(f"❌ 加入詞庫失敗，請確認詞條格式是否正確")
 
     def import_items(self, items_json):
         try:
             import json
             items = json.loads(items_json)
+            auto_gen = self.controller.settings.raw_config.get("auto_generate_variants", False)
             count = 0
             for orig, corr in items:
-                if self.controller.learning_engine.add_habit_manual(orig, corr): count += 1
+                if self.controller.learning_engine.add_habit_manual(orig, corr, auto_gen): count += 1
             self.controller.settings.update_dict_list(self.controller.learning_engine.list_all())
             logger.success(f"📔 [DICT_HANDLER] Merged {count} items.")
         except Exception as e:
@@ -63,6 +86,17 @@ class DictionaryHandler:
             self.controller.settings.update_dict_list(self.controller.learning_engine.list_all())
 
     def clear_all(self):
+        # [A65] Audit fix: add confirmation dialog before wiping entire dictionary
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            None,
+            "⚠️ 確認清空詞庫",
+            "確定要清空全部個人詞庫嗎？\n\n此操作無法復原，建議先匯出備份。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
         if self.controller.learning_engine.clear_dictionary():
             self.controller.settings.update_dict_list([])
-            self.controller.ready_signal.emit("🧹 詞庫已清空")
+            self.controller.ready_signal.emit("🧹 個人詞庫已清空")

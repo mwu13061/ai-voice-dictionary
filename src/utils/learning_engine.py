@@ -64,9 +64,10 @@ CONFUSED_GROUPS = [
 
 class LearningEngine:
     """ [A670/A555] Production Ready Database Engine with Hardened Migration """
-    def __init__(self):
+    def __init__(self, update_callback=None):
         self._lock = threading.Lock()
         self._cache = []
+        self._update_callback = update_callback
         self._initialize_db()
         self.refresh_cache()
         # [A43] Fetch latest global dictionary from GitHub on startup
@@ -165,11 +166,27 @@ class LearningEngine:
             if not db_items:
                 return
                 
+            # Load existing global dictionary to skip collecting already shared ones
+            existing_global = set()
+            global_path = os.path.join(os.path.dirname(DB_PATH), "global_learning.csv")
+            if os.path.exists(global_path):
+                try:
+                    import csv
+                    with open(global_path, 'r', encoding='utf-8-sig') as gf:
+                        g_reader = csv.reader(gf)
+                        next(g_reader, None) # Skip header
+                        for g_row in g_reader:
+                            if len(g_row) >= 2:
+                                existing_global.add((g_row[0].strip(), g_row[1].strip()))
+                except Exception as ge:
+                    logger.warning(f"Failed to read global dictionary for auto-collect check: {ge}")
+
             # [A36] Only collect phonetic typos (homophones), ignoring custom shortcuts/abbreviations
             db_dict = {}
             for orig, corr in db_items:
                 if self.is_phonetic_typo(orig, corr):
-                    db_dict[orig] = corr
+                    if (orig, corr) not in existing_global:
+                        db_dict[orig] = corr
                     
             if not db_dict:
                 return
@@ -367,7 +384,15 @@ class LearningEngine:
     def download_global_dictionary(self):
         """ [A43] Fetch latest global dictionary from GitHub in the background """
         def _download():
-            url = "https://raw.githubusercontent.com/mwu13061/ai-voice-dictionary/main/global_learning.csv"
+            # Check if we are on a developer computer (contains .git repository)
+            # If so, skip auto background download to prevent overwriting local overrides
+            is_dev = os.path.exists(".git") or os.path.exists(os.path.join(os.path.dirname(DB_PATH), "..", ".git"))
+            if is_dev:
+                logger.info("🌐 [A43] Developer machine detected (.git exists). Skipping background global dictionary download to protect local overrides.")
+                self.refresh_cache()
+                return
+
+            url = "https://raw.githubusercontent.com/mwu13061/ai-voice-dictionary/main/user_data/global_learning.csv"
             global_path = os.path.join(os.path.dirname(DB_PATH), "global_learning.csv")
             try:
                 import requests

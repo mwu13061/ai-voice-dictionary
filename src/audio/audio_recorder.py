@@ -23,6 +23,7 @@ class AudioRecorder(QObject):
         self.audio_buffer = []
         self.stream = None
         self._chunk_count = 0
+        self.device_index = None  # [A67] None = use system default
         
         # VAD Parameters
         self.vad_threshold = 0.015 
@@ -35,7 +36,7 @@ class AudioRecorder(QObject):
             return
         
         self.is_streaming_mode = streaming
-        logger.info(f"--- AUDIO RECORDING STARTED ---")
+        logger.info(f"--- AUDIO RECORDING STARTED (device={self.device_index}) ---")
         self.audio_buffer = []
         self._chunk_count = 0
         self.is_recording = True
@@ -46,11 +47,12 @@ class AudioRecorder(QObject):
                 channels=1,
                 dtype='float32',
                 callback=self._audio_callback,
-                blocksize=1600 # 0.1s chunks for smooth volume detection
+                blocksize=1600, # 0.1s chunks for smooth volume detection
+                device=self.device_index  # [A67] Use selected mic; None = system default
             )
             self.stream.start()
         except Exception as e:
-            logger.error(f"Failed to open audio stream: {e}")
+            logger.error(f"Failed to open audio stream (device={self.device_index}): {e}")
             self.is_recording = False
 
     def stop_recording(self, emit=True):

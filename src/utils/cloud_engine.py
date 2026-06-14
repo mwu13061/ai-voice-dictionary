@@ -74,45 +74,55 @@ class GeminiCloudEngine:
             return False, False
 
     def get_available_models_with_capabilities(self) -> list[dict]:
-        """ [A525] Parallel Verification - No Hardcoded Names """
+        """ [A61] Fast Model Listing - heuristic capability detection, no per-model API calls """
         if not self._api_key: return []
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self._api_key}"
-            response = requests.get(url, timeout=10)
-            if response.status_code != 200: return []
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self._api_key}&pageSize=100"
+            response = requests.get(url, timeout=15)
+            if response.status_code != 200:
+                logger.error(f"❌ [Cloud] Model list API returned {response.status_code}: {response.text[:200]}")
+                err_msg = self.explain_http_error(response.status_code)
+                raise Exception(err_msg)
             
             data = response.json()
             raw_list = data.get('models', [])
+            logger.info(f"🔍 [Cloud] Raw model count from API: {len(raw_list)}")
             
-            # Step 1: Filter potential candidates
-            candidates = []
+            # Filter and classify using heuristics (no per-model verification calls)
+            results = []
+            SKIP_KEYWORDS = ["embedding", "aqa", "classifier", "ranker", "bison", "gecko", "palm"]
+            VISION_KEYWORDS = ["flash", "pro", "ultra", "vision", "multimodal", "2.0", "1.5"]
+            
             for m in raw_list:
                 m_name = m.get('name', "")
                 m_id = m_name.replace("models/", "")
-                if any(kw in m_id.lower() for kw in ["embedding", "aqa", "classifier", "ranker"]): continue
-                if "generateContent" in m.get('supportedGenerationMethods', []):
-                    candidates.append(m_id)
+                display = m_id
+                
+                # Skip non-generation models
+                if any(kw in m_id.lower() for kw in SKIP_KEYWORDS):
+                    continue
+                if "generateContent" not in m.get('supportedGenerationMethods', []):
+                    continue
+                    
+                # Heuristic vision capability
+                can_vision = any(kw in m_id.lower() for kw in VISION_KEYWORDS)
+                
+                results.append({
+                    "id": f"models/{m_id}",
+                    "display": display,
+                    "can_vision": can_vision
+                })
             
-            # Step 2: Parallel Verification
-            from concurrent.futures import ThreadPoolExecutor
-            verified_results = []
+            # Sort: gemini models first, then alphabetically
+            results.sort(key=lambda x: (
+                0 if "gemini" in x['display'].lower() else 1,
+                x['display']
+            ))
             
-            def check(mid):
-                ok, vision = self.verify_model(mid)
-                if ok:
-                    return {"id": f"models/{mid}", "display": mid, "can_vision": vision}
-                return None
-
-            logger.info(f"🚀 [A525] Verifying {len(candidates)} models in parallel...")
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                results = list(executor.map(check, candidates))
-            
-            verified_results = [r for r in results if r]
-            verified_results.sort(key=lambda x: (not x['display'].startswith('gemini'), x['display']))
-            
-            return verified_results
+            logger.success(f"✅ [Cloud] Discovered {len(results)} usable models (fast heuristic mode)")
+            return results
         except Exception as e:
-            logger.error(f"❌ [A525] Discovery Fatal: {e}")
+            logger.error(f"❌ [Cloud] Model discovery failed: {e}")
             return []
 
     def is_ready(self) -> tuple[bool, str]:
@@ -177,10 +187,31 @@ class GeminiCloudEngine:
             if response.status_code == 200:
                 res_data = response.json()
                 return res_data['candidates'][0]['content']['parts'][0]['text']
-            elif response.status_code == 429:
-                return f"❌ API 配額超限 (429): 免費流量已用完。目標語言: {target_lang}"
-            return f"❌ 雲端 API 錯誤 ({response.status_code})"
+            return self.explain_http_error(response.status_code)
         except Exception as e: return f"❌ 視覺系統異常: {str(e)}"
+
+    def explain_http_error(self, status_code: int) -> str:
+        if status_code == 400:
+            return "❌ 請求無效 (400)：請確認選擇的模型或輸入資料格式是否正確。"
+        elif status_code == 401:
+            return "❌ 驗證失敗 (401)：請檢查您的 Gemini API Key 是否輸入正確或已過期。"
+        elif status_code == 403:
+            return (
+                "❌ 存取被拒 (403)：\n"
+                "這通常代表您的 API Key 無法存取該模型或服務。原因包含：\n"
+                "1. 您的 IP 地區不受 Google Gemini API 支援（例如在不支援的國家/地區使用 VPN）。\n"
+                "2. 您輸入的 API Key 限制了該模型的存取權限。\n"
+                "3. 該 API Key 所屬的 Google Cloud 專案未啟用 Generative Language API 服務。\n"
+                "4. 帳戶存在欠費、限制或未完成帳單設定。"
+            )
+        elif status_code == 404:
+            return "❌ 找不到資源 (404)：請確認設定中選擇的 AI 模型是否正確，或該模型已被移除。"
+        elif status_code == 429:
+            return "❌ API 配額超限 (429)：請求次數過多，或免費配額（RPM/TPM）已達上限，請稍後重試。"
+        elif status_code >= 500:
+            return f"❌ 伺服器錯誤 ({status_code})：Google 伺服器暫時繁忙或發生異常，請稍後重試。"
+        else:
+            return f"❌ 雲端 API 錯誤 ({status_code})：請檢查網路連線或 API 金鑰狀態。"
 
     def translate_text(self, text: str, target_lang: str = "繁體中文") -> str:
         if not self._initialized: return "❌ 引擎未就緒"

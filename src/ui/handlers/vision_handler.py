@@ -15,6 +15,7 @@ class VisionHandler:
     def __init__(self, controller):
         self.controller = controller
         self._snip_overlay = None # [A549] Keep reference to prevent GC
+        self._hidden_widgets = []
 
     def start_snip(self):
         """ Entry point for VISION mode """
@@ -27,12 +28,35 @@ class VisionHandler:
         
         try:
             from src.ui.snip_overlay import SnipOverlay
+            from PySide6.QtWidgets import QApplication
+            
+            # Hide all visible top-level widgets to avoid modal lockups and clear the screen
+            self._hidden_widgets = []
+            for w in QApplication.topLevelWidgets():
+                if w.isVisible():
+                    logger.debug(f"Hiding widget for snip: {w}")
+                    w.hide()
+                    self._hidden_widgets.append(w)
+            
             self._snip_overlay = SnipOverlay()
             self._snip_overlay.snip_captured.connect(self._handle_snip_captured)
+            self._snip_overlay.closed.connect(self._restore_widgets)
             self._snip_overlay.show()
             logger.success("📸 [VISION_HANDLER] Snip Overlay Visible.")
         except Exception as e:
             logger.error(f"❌ [VISION_HANDLER] Failed to show SnipOverlay: {e}")
+            self._restore_widgets()
+
+    def _restore_widgets(self):
+        logger.info("🎯 [VISION_HANDLER] Restoring hidden widgets...")
+        for w in self._hidden_widgets:
+            try:
+                w.show()
+                w.raise_()
+                w.activateWindow()
+            except Exception as e:
+                logger.error(f"❌ [VISION_HANDLER] Failed to restore widget {w}: {e}")
+        self._hidden_widgets = []
 
     def _handle_snip_captured(self, rect):
         logger.info(f"📸 [VISION_HANDLER] Area captured: {rect}")

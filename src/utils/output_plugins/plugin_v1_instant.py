@@ -93,12 +93,110 @@ class OutputPlugin:
         
         n = len(inputs)
         input_array = (INPUT * n)(*inputs)
-        self.SendInput(n, input_array, ctypes.sizeof(INPUT))
-        logger.success(f"🚀 [PERF] Atomic Unicode Injection completed for {len(text)} chars.")
+        sent = self.SendInput(n, input_array, ctypes.sizeof(INPUT))
+        if sent < n:
+            logger.warning(f"⚠️ [OUTPUT] SendInput injected only {sent}/{n} events. This is typically blocked by Windows UIPI if the target window is running as Administrator (Elevated), or if the screen/workstation is locked.")
+        else:
+            logger.success(f"🚀 [PERF] Atomic Unicode Injection completed for {len(text)} chars.")
+
+    def _log_foreground_window_diagnostics(self):
+        try:
+            import os
+            # Define types and functions
+            GetForegroundWindow = ctypes.windll.user32.GetForegroundWindow
+            GetForegroundWindow.restype = wintypes.HWND
+
+            GetWindowTextW = ctypes.windll.user32.GetWindowTextW
+            GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+            GetWindowTextW.restype = ctypes.c_int
+
+            GetWindowThreadProcessId = ctypes.windll.user32.GetWindowThreadProcessId
+            GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+            GetWindowThreadProcessId.restype = wintypes.DWORD
+
+            GetLastError = ctypes.windll.kernel32.GetLastError
+            GetLastError.restype = wintypes.DWORD
+
+            hwnd = GetForegroundWindow()
+            if not hwnd:
+                logger.info("ℹ️ [OUTPUT_DIAGNOSTICS] No active foreground window detected.")
+                return
+
+            # Get Title
+            title_buf = ctypes.create_unicode_buffer(512)
+            GetWindowTextW(hwnd, title_buf, 512)
+            title = title_buf.value or "Untitled / Unknown"
+
+            # Get PID
+            pid = wintypes.DWORD(0)
+            GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            target_pid = pid.value
+
+            # Get Process Name
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            OpenProcess = ctypes.windll.kernel32.OpenProcess
+            OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            OpenProcess.restype = wintypes.HANDLE
+            
+            CloseHandle = ctypes.windll.kernel32.CloseHandle
+            CloseHandle.argtypes = [wintypes.HANDLE]
+            CloseHandle.restype = wintypes.BOOL
+            
+            QueryFullProcessImageNameW = ctypes.windll.kernel32.QueryFullProcessImageNameW
+            QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+            QueryFullProcessImageNameW.restype = wintypes.BOOL
+
+            h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, target_pid)
+            proc_name = "Unknown"
+            is_elevated_guess = False
+            
+            if h_proc:
+                buf = ctypes.create_unicode_buffer(1024)
+                size = wintypes.DWORD(1024)
+                if QueryFullProcessImageNameW(h_proc, 0, buf, ctypes.byref(size)):
+                    proc_name = os.path.basename(buf.value)
+                CloseHandle(h_proc)
+            else:
+                err = GetLastError()
+                if err == 5: # Access Denied
+                    proc_name = "Access Denied (Target process likely runs as Administrator)"
+                    is_elevated_guess = True
+                else:
+                    proc_name = f"OpenProcess failed (Code {err})"
+
+            # Our app status
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+            
+            # Check if focus is our own app window
+            my_pid = os.getpid()
+            is_own_window = (target_pid == my_pid)
+
+            # Check physically pressed modifiers
+            pressed_modifiers = []
+            for name, vk in [("Shift", 0x10), ("Ctrl", 0x11), ("Alt", 0x12), ("WinLeft", 0x5B), ("WinRight", 0x5C)]:
+                if (ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000) != 0:
+                    pressed_modifiers.append(name)
+
+            # Log summary
+            diag_msg = (
+                f"🖥️ [OUTPUT_DIAGNOSTICS] Active Window: [{title}] | Process: {proc_name} (PID: {target_pid}) | "
+                f"App Admin: {is_admin} | Target Admin Guess: {is_elevated_guess} | Active Modifiers: {pressed_modifiers}"
+            )
+            logger.info(diag_msg)
+
+            if is_own_window:
+                logger.warning("⚠️ [OUTPUT_DIAGNOSTICS] WARNING: The foreground window belongs to the AI Assistant itself. The text cannot paste into another application unless you focus on that application first.")
+            elif is_elevated_guess and not is_admin:
+                logger.warning("⚠️ [OUTPUT_DIAGNOSTICS] PRIVILEGE MISMATCH WARNING: The target window runs as Administrator (Elevated), but this Assistant runs as a normal user. Windows UIPI will BLOCK all simulated inputs. Please run the AI Assistant as Administrator to output text to this window.")
+
+        except Exception as e:
+            logger.error(f"❌ [OUTPUT_DIAGNOSTICS] Failed to gather active window info: {e}")
 
     def output(self, text: str, mode: int = 0):
         """ [A634] ZERO-DELAY PIPE """
         if not text: return
+        
+        self._log_foreground_window_diagnostics()
         
         # Virtually release modifiers natively using keybd_event to avoid races or paste failures
         vks = [0x10, 0x11, 0x12, 0x5B, 0x5C] # shift, ctrl, alt, win
@@ -115,22 +213,41 @@ class OutputPlugin:
             if mode == 0:
                 try:
                     self._robust_clipboard_copy(text)
-                    time.sleep(0.002) # Very minimal sleep to let clipboard sync
-                    user32.keybd_event(0x11, 0x1D, 0, 0) # Ctrl down
-                    user32.keybd_event(0x56, 0x2F, 0, 0) # V down
-                    time.sleep(0.01)
-                    user32.keybd_event(0x56, 0x2F, 2, 0) # V up
-                    user32.keybd_event(0x11, 0x1D, 2, 0) # Ctrl up
+                    
+                    # [A63] Verify clipboard content was set correctly before sending Ctrl+V
+                    verify_ok = False
+                    for _ in range(8):
+                        time.sleep(0.008)  # 8ms per check, up from 2ms total
+                        try:
+                            cb_content = pyperclip.paste()
+                            if cb_content == text:
+                                verify_ok = True
+                                break
+                        except:
+                            pass
+                    
+                    if not verify_ok:
+                        logger.warning(f"⚠️ [OUTPUT] Clipboard verify failed after 64ms, falling back to Unicode inject")
+                        self._unicode_inject(text)
+                    else:
+                        logger.info(f"📋 [OUTPUT] Clipboard verified OK, sending Ctrl+V for {len(text)} chars")
+                        user32.keybd_event(0x11, 0x1D, 0, 0) # Ctrl down
+                        user32.keybd_event(0x56, 0x2F, 0, 0) # V down
+                        time.sleep(0.015)  # 15ms (up from 10ms) for slow IME environments
+                        user32.keybd_event(0x56, 0x2F, 2, 0) # V up
+                        user32.keybd_event(0x11, 0x1D, 2, 0) # Ctrl up
+                        logger.info(f"✅ [OUTPUT] Ctrl+V sent successfully")
                 except Exception as clipboard_err:
-                    logger.warning(f"⚠️ Clipboard paste failed: {clipboard_err}. Falling back to Atomic Unicode Injection.")
+                    logger.warning(f"⚠️ [OUTPUT] Clipboard paste failed: {clipboard_err}. Falling back to Atomic Unicode Injection.")
                     self._unicode_inject(text)
             else:
                 self._unicode_inject(text)
         except Exception as e: 
-            logger.error(f"Output error: {e}")
+            logger.error(f"❌ [OUTPUT] Fatal output error: {e}")
             self._unicode_inject(text)
         finally:
             # Restore modifier keys if they were physically held down
             for vk in released:
                 sc = vk_sc.get(vk, 0)
                 user32.keybd_event(vk, sc, 0, 0) # KEYEVENTF_KEYDOWN
+

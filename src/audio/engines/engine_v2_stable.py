@@ -65,6 +65,7 @@ class EngineV2Stable:
 
     def update_config(self, config: dict):
         self.use_punc = bool(config.get("use_punc", True))
+        self.language = config.get("asr_language", "zh")
 
     def process(self, audio_data: np.ndarray) -> str:
         """ [A613/A633] SPEED LOCKED - NO IMPORTS OR IO IN THIS BLOCK """
@@ -76,7 +77,7 @@ class EngineV2Stable:
                 res = self.asr_model.generate(
                     input=audio_data, 
                     cache={},
-                    language="zh", 
+                    language=getattr(self, "language", "zh"), 
                     use_itn=self.use_punc
                 )
                 

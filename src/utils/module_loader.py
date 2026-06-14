@@ -43,7 +43,26 @@ class ModuleLoader:
             if not engine_version:
                 logger.error("Loader Error: engine_version is empty!")
                 return None
+            
+            # Map version string to class name
+            class_map = {
+                "v2_stable": "EngineV2Stable",
+                "v1_legacy": "EngineV1Legacy"
+            }
+            class_name = class_map.get(engine_version, "EngineV2Stable")
+            
+            # [A60] Stage 1: Import by module name (works in packaged EXE and installed source)
+            module_name = f"src.audio.engines.engine_{engine_version}"
+            try:
+                import importlib as _il
+                module = _il.import_module(module_name)
+                instance = getattr(module, class_name)()
+                logger.success(f"✅ Engine loaded via import_module: {module_name}")
+                return instance
+            except (ImportError, AttributeError):
+                pass  # Fall through to file-based loading
                 
+            # [A60] Stage 2: File-based loading (source environment fallback)
             rel_path = os.path.join("src", "audio", "engines", f"engine_{engine_version}.py")
             file_path = ModuleLoader._probe_path(rel_path)
             
@@ -56,14 +75,6 @@ class ModuleLoader:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            # Map version string to class name
-            class_map = {
-                "v2_stable": "EngineV2Stable",
-                "v1_legacy": "EngineV1Legacy"
-            }
-            class_name = class_map.get(engine_version, "EngineV2Stable")
-            
-            # [A379] VERBOSE LOAD TRACEBACK
             try:
                 instance = getattr(module, class_name)()
                 return instance
@@ -76,20 +87,36 @@ class ModuleLoader:
             logger.error(f"Engine Load Failed Traceback:\n{traceback.format_exc()}")
             return None
 
+
     @staticmethod
     def load_output_plugin(plugin_version: str):
         try:
+            # [A60] Stage 1: Import by module name (works in packaged EXE and installed source)
+            module_name = f"src.utils.output_plugins.plugin_{plugin_version}"
+            try:
+                import importlib
+                module = importlib.import_module(module_name)
+                instance = module.OutputPlugin()
+                logger.success(f"✅ Output plugin loaded via import_module: {module_name}")
+                return instance
+            except ImportError:
+                pass  # Fall through to file-based loading
+            
+            # [A60] Stage 2: File-based loading (source environment fallback)
             rel_path = os.path.join("src", "utils", "output_plugins", f"plugin_{plugin_version}.py")
             file_path = ModuleLoader._probe_path(rel_path)
             
-            if not file_path: return None
+            if not file_path:
+                logger.error(f"Output plugin file not found: {rel_path}")
+                return None
                 
             spec = importlib.util.spec_from_file_location(f"plugin_{plugin_version}", file_path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            class_name = "OutputPlugin"
-            return getattr(module, class_name)()
+            instance = module.OutputPlugin()
+            logger.success(f"✅ Output plugin loaded via file: {file_path}")
+            return instance
         except Exception as e:
             logger.error(f"Plugin Load Failed: {e}")
             return None
