@@ -246,15 +246,51 @@ class AppController(QObject):
             logger.warning(f"Error checking HWND validity: {ex}")
             return False
 
+    def _capture_focused_hwnd(self):
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            class GUITHREADINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("flags", wintypes.DWORD),
+                    ("hwndActive", wintypes.HWND),
+                    ("hwndFocus", wintypes.HWND),
+                    ("hwndCapture", wintypes.HWND),
+                    ("hwndMenuOwner", wintypes.HWND),
+                    ("hwndMoveSize", wintypes.HWND),
+                    ("hwndCaret", wintypes.HWND),
+                    ("rcCaret", wintypes.RECT)
+                ]
+                
+            gui = GUITHREADINFO()
+            gui.cbSize = ctypes.sizeof(GUITHREADINFO)
+            
+            if ctypes.windll.user32.GetGUIThreadInfo(0, ctypes.byref(gui)):
+                # If hwndFocus is valid, it's the exact focused typing control (like Edit in Notepad or active caret input)
+                # If not, fallback to hwndActive (the active foreground window)
+                hwnd = gui.hwndFocus or gui.hwndActive
+                if hwnd:
+                    return hwnd
+            
+            return ctypes.windll.user32.GetForegroundWindow()
+        except Exception as ex:
+            logger.warning(f"Error in GetGUIThreadInfo: {ex}")
+            try:
+                import ctypes
+                return ctypes.windll.user32.GetForegroundWindow()
+            except:
+                return None
+
     def request_start(self):
         with self._lock:
             if self.is_recording: return
             self.is_recording = True
             
-            # Capture target window HWND when recording starts
+            # Capture target window HWND when recording starts using high-precision caret focus
             try:
-                import ctypes
-                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                hwnd = self._capture_focused_hwnd()
                 if hwnd and self._is_valid_external_hwnd(hwnd):
                     self._target_hwnd = hwnd
                     self._last_valid_target_hwnd = hwnd
