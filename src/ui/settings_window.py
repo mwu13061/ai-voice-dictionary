@@ -1064,25 +1064,46 @@ class GlobalDictModeratorDialog(QDialog):
         for i in range(self.lw_low.count()):
             orig, corr, _ = self.lw_low.item(i).data(Qt.UserRole)
             approved_items.append((orig, corr))
-        if not approved_items:
+            
+        from src.utils.learning_engine import get_locked_db_path
+        global_csv_path = os.path.join(os.path.dirname(get_locked_db_path()), "global_learning.csv")
+        
+        # 1. 讀取現有的全球詞庫舊項目，防止被覆蓋
+        existing_global_items = {}
+        if os.path.exists(global_csv_path):
+            try:
+                import csv
+                with open(global_csv_path, 'r', encoding='utf-8-sig') as gf:
+                    g_reader = csv.reader(gf)
+                    next(g_reader, None) # Skip header
+                    for g_row in g_reader:
+                        if len(g_row) >= 2:
+                            existing_global_items[g_row[0].strip()] = g_row[1].strip()
+            except Exception as ge:
+                logger.warning(f"讀取舊有全球共享詞庫失敗: {ge}")
+                
+        # 2. 合併新核准的項目（以新核准的為準覆蓋同 key 舊項目，或者新增）
+        for orig, corr in approved_items:
+            existing_global_items[orig] = corr
+            
+        # 如果合併後仍然為空，這時才詢問是否要清空
+        if not existing_global_items:
             reply = QMessageBox.question(
-                self, "確認", "安全候選清單為空。這將會清空全球詞庫主檔。確定要繼續嗎？",
+                self, "確認", "合併後的全球共享詞庫為空。這將會清空全球詞庫主檔。確定要繼續嗎？",
                 QMessageBox.Yes | QMessageBox.No
             )
             if reply == QMessageBox.No:
                 return
                 
-        from src.utils.learning_engine import get_locked_db_path
-        global_csv_path = os.path.join(os.path.dirname(get_locked_db_path()), "global_learning.csv")
         import csv
         try:
             os.makedirs(os.path.dirname(global_csv_path), exist_ok=True)
             with open(global_csv_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Original', 'Correction'])
-                for orig, corr in sorted(approved_items):
+                for orig, corr in sorted(existing_global_items.items()):
                     writer.writerow([orig, corr])
-            self.log(f"💾 本地全球詞庫已更新：{global_csv_path} ({len(approved_items)} 筆)")
+            self.log(f"💾 本地全球詞庫已更新（已合併舊詞條）：{global_csv_path} (總共 {len(existing_global_items)} 筆，本次新增 {len(approved_items)} 筆)")
             self.engine.refresh_cache()
         except Exception as ex:
             QMessageBox.critical(self, "儲存失敗", f"無法儲存至本地 global_learning.csv: {ex}")
